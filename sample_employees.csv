@@ -1,0 +1,6 @@
+name,email,role,department,start_date
+John Doe,john.doe@krnl.com,Software Engineer,Engineering,2024-01-15
+Jane Smith,jane.smith@krnl.com,Product Manager,Product,2024-01-20
+Mike Johnson,mike.johnson@krnl.com,Designer,Design,2024-01-25
+Sarah Wilson,sarah.wilson@krnl.com,QA Engineer,QA,2024-02-01
+David Brown,david.brown@krnl.com,DevOps Engineer,DevOps,2024-02-05

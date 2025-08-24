@@ -1,0 +1,243 @@
+{
+  "mcp_version": "1.0",
+  "agent": {
+    "name": "scheduler-agent",
+    "version": "1.0.0",
+    "description": "Multi-Cloud Protocol compliant agent for scheduling onboarding events",
+    "vendor": "KRNL",
+    "type": "scheduler"
+  },
+  "capabilities": {
+    "scheduling": {
+      "supports_calendar_integration": true,
+      "calendar_providers": ["google_calendar", "outlook", "mock"],
+      "event_types": [
+        "orientation",
+        "hr_meeting", 
+        "team_meeting",
+        "training_session",
+        "equipment_setup"
+      ],
+      "scheduling_constraints": {
+        "business_hours": {
+          "start": "08:00",
+          "end": "18:00",
+          "timezone": "UTC"
+        },
+        "working_days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+        "advance_notice_hours": 24,
+        "max_duration_hours": 8
+      }
+    },
+    "automation": {
+      "auto_conflict_resolution": true,
+      "multi_attendee_scheduling": true,
+      "recurring_events": false,
+      "reminder_notifications": true
+    }
+  },
+  "interfaces": {
+    "input": {
+      "schema": {
+        "type": "object",
+        "required": ["employee_data", "employee_id"],
+        "properties": {
+          "employee_data": {
+            "type": "object",
+            "required": ["name", "email", "start_date", "role", "department"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1},
+              "email": {"type": "string", "format": "email"},
+              "start_date": {"type": "string", "format": "date"},
+              "role": {"type": "string"},
+              "department": {"type": "string"}
+            }
+          },
+          "employee_id": {"type": "string", "format": "uuid"},
+          "scheduling_preferences": {
+            "type": "object",
+            "properties": {
+              "preferred_start_time": {"type": "string", "format": "time"},
+              "duration_hours": {"type": "number", "minimum": 0.5, "maximum": 8},
+              "attendees": {"type": "array", "items": {"type": "string", "format": "email"}}
+            }
+          }
+        }
+      },
+      "examples": [
+        {
+          "employee_data": {
+            "name": "John Doe",
+            "email": "john.doe@example.com",
+            "start_date": "2024-01-15",
+            "role": "Software Engineer",
+            "department": "Engineering"
+          },
+          "employee_id": "123e4567-e89b-12d3-a456-426614174000"
+        }
+      ]
+    },
+    "output": {
+      "schema": {
+        "type": "object",
+        "required": ["events_scheduled", "events", "calendar_summary"],
+        "properties": {
+          "events_scheduled": {"type": "integer", "minimum": 0},
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["type", "title", "start_time", "end_time", "status"],
+              "properties": {
+                "type": {"type": "string", "enum": ["orientation", "hr_meeting", "team_meeting"]},
+                "title": {"type": "string"},
+                "start_time": {"type": "string", "format": "date-time"},
+                "end_time": {"type": "string", "format": "date-time"},
+                "calendar_event_id": {"type": "string"},
+                "db_event_id": {"type": "string"},
+                "attendees": {"type": "array", "items": {"type": "string", "format": "email"}},
+                "status": {"type": "string", "enum": ["scheduled", "confirmed", "cancelled"]}
+              }
+            }
+          },
+          "calendar_summary": {
+            "type": "object",
+            "properties": {
+              "employee_name": {"type": "string"},
+              "employee_email": {"type": "string"},
+              "start_date": {"type": "string", "format": "date"},
+              "total_events": {"type": "integer"},
+              "orientation_scheduled": {"type": "boolean"},
+              "hr_meeting_scheduled": {"type": "boolean"},
+              "team_meeting_scheduled": {"type": "boolean"}
+            }
+          },
+          "next_steps": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  },
+  "communication": {
+    "protocols": {
+      "http": {
+        "endpoint": "/api/v1/agents/scheduler/process",
+        "method": "POST",
+        "content_type": "application/json",
+        "authentication": {
+          "type": "bearer_token",
+          "required": true
+        }
+      },
+      "message_queue": {
+        "type": "redis",
+        "queue_name": "scheduler_agent_queue",
+        "exchange": "onboarding_exchange",
+        "routing_key": "scheduler.process"
+      },
+      "a2a": {
+        "supported": true,
+        "can_call": ["notifier-agent"],
+        "can_be_called_by": ["account-setup-agent", "orchestrator"],
+        "message_format": "json_rpc_2.0"
+      }
+    },
+    "health_check": {
+      "endpoint": "/api/v1/agents/scheduler/health",
+      "method": "GET",
+      "expected_response": {"status": "healthy", "timestamp": "iso_8601"}
+    }
+  },
+  "dependencies": {
+    "external_services": [
+      {
+        "name": "google_calendar_api",
+        "required": false,
+        "fallback": "mock_calendar_service"
+      },
+      {
+        "name": "postgres_database",
+        "required": true,
+        "connection_string": "${DATABASE_URL}"
+      }
+    ],
+    "other_agents": [
+      {
+        "name": "notifier-agent",
+        "interaction_type": "a2a",
+        "required": false,
+        "purpose": "Send calendar invitations"
+      }
+    ]
+  },
+  "monitoring": {
+    "metrics": [
+      {
+        "name": "events_scheduled_total",
+        "type": "counter",
+        "description": "Total number of events scheduled"
+      },
+      {
+        "name": "scheduling_duration_seconds",
+        "type": "histogram",
+        "description": "Time taken to schedule events"
+      },
+      {
+        "name": "scheduling_errors_total",
+        "type": "counter",
+        "description": "Total number of scheduling errors"
+      }
+    ],
+    "health_indicators": [
+      "database_connectivity",
+      "calendar_api_connectivity",
+      "message_queue_connectivity"
+    ]
+  },
+  "configuration": {
+    "environment_variables": [
+      {
+        "name": "DATABASE_URL",
+        "required": true,
+        "description": "PostgreSQL connection string"
+      },
+      {
+        "name": "REDIS_URL", 
+        "required": true,
+        "description": "Redis connection string for message queue"
+      },
+      {
+        "name": "GOOGLE_CALENDAR_CREDENTIALS",
+        "required": false,
+        "description": "Google Calendar API credentials JSON"
+      },
+      {
+        "name": "DEFAULT_TIMEZONE",
+        "required": false,
+        "default": "UTC",
+        "description": "Default timezone for scheduling"
+      }
+    ],
+    "agent_settings": {
+      "max_concurrent_scheduling": 10,
+      "default_event_duration_hours": 1,
+      "auto_retry_failed_scheduling": true,
+      "retry_max_attempts": 3,
+      "retry_delay_seconds": 30
+    }
+  },
+  "compliance": {
+    "mcp_features": [
+      "standardized_interfaces",
+      "health_monitoring",
+      "error_handling",
+      "logging_integration",
+      "agent_to_agent_communication"
+    ],
+    "data_handling": {
+      "pii_processing": true,
+      "data_retention_days": 90,
+      "encryption_at_rest": true,
+      "audit_logging": true
+    }
+  }
+}

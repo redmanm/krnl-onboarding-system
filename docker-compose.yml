@@ -1,0 +1,141 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - krnl-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - krnl-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      ENVIRONMENT: ${ENVIRONMENT}
+      SECRET_KEY: ${SECRET_KEY}
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
+      SMTP_SERVER: ${SMTP_SERVER}
+      SMTP_PORT: ${SMTP_PORT}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+    networks:
+      - krnl-network
+
+  validator-agent:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.agent
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      AGENT_TYPE: validator
+      AGENT_TIMEOUT: ${VALIDATOR_AGENT_TIMEOUT}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - krnl-network
+
+  account-agent:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.agent
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      AGENT_TYPE: account_setup
+      AGENT_TIMEOUT: ${ACCOUNT_SETUP_AGENT_TIMEOUT}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - krnl-network
+
+  scheduler-agent:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.agent
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      AGENT_TYPE: scheduler
+      AGENT_TIMEOUT: ${SCHEDULER_AGENT_TIMEOUT}
+      GOOGLE_CALENDAR_ENABLED: ${GOOGLE_CALENDAR_ENABLED}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - krnl-network
+
+  notifier-agent:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.agent
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      AGENT_TYPE: notifier
+      AGENT_TIMEOUT: ${NOTIFIER_AGENT_TIMEOUT}
+      EMAIL_NOTIFICATIONS: ${EMAIL_NOTIFICATIONS}
+      SLACK_NOTIFICATIONS: ${SLACK_NOTIFICATIONS}
+      SMTP_SERVER: ${SMTP_SERVER}
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - krnl-network
+
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+      - ./frontend/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - backend
+    networks:
+      - krnl-network
+
+volumes:
+  postgres_data:
+
+networks:
+  krnl-network:
+    driver: bridge
