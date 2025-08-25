@@ -293,6 +293,145 @@ async def get_employee(employee_id: uuid.UUID, db: Session = Depends(get_db)):
         logger.error("Failed to get employee", employee_id=str(employee_id), error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.put("/api/v1/employees/{employee_id}", response_model=Dict[str, Any], tags=["Employees"])
+async def update_employee(employee_id: uuid.UUID, employee_data: schemas.EmployeeCreate, db: Session = Depends(get_db)):
+    """Update employee information"""
+    try:
+        employee = db.query(Employee).filter(Employee.id == employee_id).first()
+        if not employee:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        
+        # Update employee fields
+        employee.name = employee_data.name
+        employee.email = employee_data.email
+        employee.role = employee_data.role
+        employee.department = employee_data.department
+        employee.start_date = employee_data.start_date
+        employee.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(employee)
+        
+        logger.info("Employee updated successfully", employee_id=str(employee_id), email=employee.email)
+        
+        return {
+            "message": "Employee updated successfully",
+            "employee_id": str(employee.id),
+            "employee": {
+                "id": str(employee.id),
+                "name": employee.name,
+                "email": employee.email,
+                "role": employee.role,
+                "department": employee.department,
+                "start_date": employee.start_date.isoformat()
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to update employee", employee_id=str(employee_id), error=str(e))
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/v1/employees/{employee_id}", response_model=Dict[str, Any], tags=["Employees"])
+async def delete_employee(employee_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Delete employee and all related data"""
+    try:
+        employee = db.query(Employee).filter(Employee.id == employee_id).first()
+        if not employee:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        
+        employee_name = employee.name
+        employee_email = employee.email
+        
+        # Delete related records (cascade should handle this, but let's be explicit)
+        from models import OnboardingWorkflow, AgentLog, SystemAccount, CalendarEvent, Notification
+        
+        # Delete workflows
+        workflows = db.query(OnboardingWorkflow).filter(OnboardingWorkflow.employee_id == employee_id).all()
+        for workflow in workflows:
+            # Delete agent logs for this workflow
+            db.query(AgentLog).filter(AgentLog.workflow_id == workflow.id).delete()
+            db.delete(workflow)
+        
+        # Delete system accounts
+        db.query(SystemAccount).filter(SystemAccount.employee_id == employee_id).delete()
+        
+        # Delete calendar events
+        db.query(CalendarEvent).filter(CalendarEvent.employee_id == employee_id).delete()
+        
+        # Delete notifications
+        db.query(Notification).filter(Notification.employee_id == employee_id).delete()
+        
+        # Finally delete the employee
+        db.delete(employee)
+        db.commit()
+        
+        logger.info("Employee deleted successfully", 
+                   employee_id=str(employee_id), 
+                   name=employee_name, 
+                   email=employee_email)
+        
+        return {
+            "message": "Employee and all related data deleted successfully",
+            "deleted_employee": {
+                "id": str(employee_id),
+                "name": employee_name,
+                "email": employee_email
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to delete employee", employee_id=str(employee_id), error=str(e))
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/v1/employees/all", response_model=Dict[str, Any], tags=["Employees"])
+async def delete_all_employees(confirm: bool = False, db: Session = Depends(get_db)):
+    """Delete all employees and reset database (for demo purposes)"""
+    if not confirm:
+        raise HTTPException(
+            status_code=400, 
+            detail="This is a destructive operation. Add ?confirm=true to proceed."
+        )
+    
+    try:
+        from models import OnboardingWorkflow, AgentLog, SystemAccount, CalendarEvent, Notification
+        
+        # Count before deletion
+        employee_count = db.query(Employee).count()
+        workflow_count = db.query(OnboardingWorkflow).count()
+        
+        # Delete all data in correct order (foreign key constraints)
+        db.query(AgentLog).delete()
+        db.query(Notification).delete()
+        db.query(CalendarEvent).delete()
+        db.query(SystemAccount).delete()
+        db.query(OnboardingWorkflow).delete()
+        db.query(Employee).delete()
+        
+        db.commit()
+        
+        logger.info("All employee data deleted", 
+                   deleted_employees=employee_count,
+                   deleted_workflows=workflow_count)
+        
+        return {
+            "message": "All employee data deleted successfully",
+            "deleted_counts": {
+                "employees": employee_count,
+                "workflows": workflow_count
+            }
+        }
+        
+    except Exception as e:
+        logger.error("Failed to delete all employees", error=str(e))
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Workflow endpoints
 @app.get("/api/v1/workflows/{workflow_id}", response_model=Dict[str, Any], tags=["Workflows"])
 async def get_workflow_status(workflow_id: uuid.UUID):

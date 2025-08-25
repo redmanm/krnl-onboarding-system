@@ -9,6 +9,18 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
   Table,
   TableBody,
   TableCell,
@@ -35,6 +47,8 @@ import {
   Clock,
   AlertCircle,
   User,
+  Trash2,
+  Database,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/navigation";
 import { useNotifications } from "@/lib/notifications";
@@ -42,6 +56,9 @@ import { useLoadingState } from "@/lib/loading";
 import {
   getEmployees,
   getEmployeeDetails,
+  deleteEmployee,
+  deleteAllEmployees,
+  updateEmployee,
   formatDate,
   formatTime,
   getStatusClass,
@@ -65,10 +82,28 @@ export default function EmployeesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeDetails | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  
+  // Edit state
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    role: "",
+    department: "",
+    start_date: ""
+  });
+  
+  // Delete state
+  const [deletingEmployee, setDeletingEmployee] = useState<Employee | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false);
 
   const { showError, showSuccess } = useNotifications();
   const [isLoading, setLoading] = useLoadingState("employees");
   const [isDetailsLoading, setDetailsLoading] = useLoadingState("employee-details");
+  const [isDeleting, setDeleting] = useLoadingState("delete-employee");
+  const [isUpdating, setUpdating] = useLoadingState("update-employee");
 
   // Load employees
   const loadEmployees = async () => {
@@ -100,7 +135,76 @@ export default function EmployeesPage() {
     }
   };
 
-  // Filter employees based on search term
+  // Edit employee
+  const handleEditEmployee = (employee: Employee) => {
+    setEditingEmployee(employee);
+    setEditForm({
+      name: employee.name,
+      email: employee.email,
+      role: employee.role,
+      department: employee.department,
+      start_date: employee.start_date.split('T')[0] // Convert to date format
+    });
+    setIsEditOpen(true);
+  };
+
+  const handleUpdateEmployee = async () => {
+    if (!editingEmployee) return;
+    
+    try {
+      setUpdating(true);
+      await updateEmployee(editingEmployee.id, editForm);
+      showSuccess(`Employee ${editForm.name} updated successfully`);
+      setIsEditOpen(false);
+      setEditingEmployee(null);
+      await loadEmployees(); // Refresh the list
+    } catch (error) {
+      showError("Failed to update employee");
+      console.error("Update employee error:", error);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // Delete employee
+  const handleDeleteEmployee = (employee: Employee) => {
+    setDeletingEmployee(employee);
+    setIsDeleteOpen(true);
+  };
+
+  const confirmDeleteEmployee = async () => {
+    if (!deletingEmployee) return;
+    
+    try {
+      setDeleting(true);
+      await deleteEmployee(deletingEmployee.id);
+      showSuccess(`Employee ${deletingEmployee.name} deleted successfully`);
+      setIsDeleteOpen(false);
+      setDeletingEmployee(null);
+      await loadEmployees(); // Refresh the list
+    } catch (error) {
+      showError("Failed to delete employee");
+      console.error("Delete employee error:", error);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Delete all employees
+  const handleDeleteAllEmployees = async () => {
+    try {
+      setDeleting(true);
+      await deleteAllEmployees();
+      showSuccess("All employees deleted successfully");
+      setIsDeleteAllOpen(false);
+      await loadEmployees(); // Refresh the list
+    } catch (error) {
+      showError("Failed to delete all employees");
+      console.error("Delete all employees error:", error);
+    } finally {
+      setDeleting(false);
+    }
+  };
   const debouncedFilter = debounce((term: string) => {
     if (!term) {
       setFilteredEmployees(employees);
@@ -190,6 +294,16 @@ export default function EmployeesPage() {
               <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
+            {employees.length > 0 && (
+              <Button 
+                variant="destructive" 
+                onClick={() => setIsDeleteAllOpen(true)}
+                disabled={isLoading || isDeleting}
+              >
+                <Database className="h-4 w-4 mr-2" />
+                Reset Database
+              </Button>
+            )}
           </div>
         </div>
 
@@ -304,14 +418,21 @@ export default function EmployeesPage() {
                                   <Eye className="h-4 w-4 mr-2" />
                                   View Details
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleEditEmployee(employee)}
+                                  disabled={isUpdating}
+                                >
                                   <Edit className="h-4 w-4 mr-2" />
                                   Edit Employee
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem className="text-red-400">
-                                  <AlertCircle className="h-4 w-4 mr-2" />
-                                  Remove Employee
+                                <DropdownMenuItem 
+                                  className="text-red-400"
+                                  onClick={() => handleDeleteEmployee(employee)}
+                                  disabled={isDeleting}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Employee
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -525,6 +646,166 @@ export default function EmployeesPage() {
             ) : null}
           </DialogContent>
         </Dialog>
+
+        {/* Edit Employee Dialog */}
+        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Employee</DialogTitle>
+              <DialogDescription>
+                Update employee information
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Name</Label>
+                <Input
+                  id="edit-name"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  placeholder="Employee name"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-email">Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  placeholder="employee@company.com"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-role">Role</Label>
+                <Input
+                  id="edit-role"
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                  placeholder="Software Engineer"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-department">Department</Label>
+                <Input
+                  id="edit-department"
+                  value={editForm.department}
+                  onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
+                  placeholder="Engineering"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-start-date">Start Date</Label>
+                <Input
+                  id="edit-start-date"
+                  type="date"
+                  value={editForm.start_date}
+                  onChange={(e) => setEditForm({ ...editForm, start_date: e.target.value })}
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsEditOpen(false)}
+                disabled={isUpdating}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleUpdateEmployee}
+                disabled={isUpdating || !editForm.name || !editForm.email}
+              >
+                {isUpdating ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  "Update Employee"
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Employee Confirmation */}
+        <AlertDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Employee</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete <strong>{deletingEmployee?.name}</strong>? 
+                This will permanently remove the employee and all associated onboarding data.
+                This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={confirmDeleteEmployee}
+                disabled={isDeleting}
+                className="bg-red-500 hover:bg-red-600"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete Employee"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Delete All Employees Confirmation */}
+        <AlertDialog open={isDeleteAllOpen} onOpenChange={setIsDeleteAllOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reset Database</AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2">
+                <p>
+                  Are you sure you want to delete <strong>ALL {employees.length} employees</strong> 
+                  and reset the database? This will permanently remove:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  <li>All employee records</li>
+                  <li>All onboarding workflows</li>
+                  <li>All agent logs and audit trails</li>
+                  <li>All system accounts and calendar events</li>
+                </ul>
+                <p className="font-semibold text-red-500">
+                  This action cannot be undone and is intended for demo reset purposes.
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleDeleteAllEmployees}
+                disabled={isDeleting}
+                className="bg-red-500 hover:bg-red-600"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Resetting...
+                  </>
+                ) : (
+                  "Reset Database"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );

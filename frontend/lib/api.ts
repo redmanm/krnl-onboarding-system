@@ -94,7 +94,7 @@ export async function apiCall<T = any>(
   options: RequestInit = {}
 ): Promise<T> {
   const maxRetries = 3;
-  let lastError: Error;
+  let lastError: Error = new Error('Unknown error');
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -187,6 +187,25 @@ export async function createEmployee(employeeData: Omit<Employee, 'id'>): Promis
   return apiCall('/api/v1/employees', {
     method: 'POST',
     body: JSON.stringify(employeeData),
+  });
+}
+
+export async function updateEmployee(employeeId: string, employeeData: Omit<Employee, 'id'>): Promise<any> {
+  return apiCall(`/api/v1/employees/${employeeId}`, {
+    method: 'PUT',
+    body: JSON.stringify(employeeData),
+  });
+}
+
+export async function deleteEmployee(employeeId: string): Promise<any> {
+  return apiCall(`/api/v1/employees/${employeeId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function deleteAllEmployees(): Promise<any> {
+  return apiCall('/api/v1/employees/all?confirm=true', {
+    method: 'DELETE',
   });
 }
 
@@ -298,7 +317,7 @@ export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout;
+  let timeout: any;
   return function executedFunction(...args: Parameters<T>) {
     const later = () => {
       clearTimeout(timeout);

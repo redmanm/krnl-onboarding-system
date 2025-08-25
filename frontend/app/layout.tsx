@@ -7,6 +7,7 @@ import { LoadingProvider } from '@/lib/loading'
 import { ThemeProvider } from '@/components/theme-provider'
 import './globals.css'
 
+
 export const metadata: Metadata = {
   title: 'KRNL Onboarding System - Dashboard',
   description: 'Modern multi-agent employee onboarding system built with KRNL technology',
@@ -60,3 +61,4 @@ html {
     </html>
   )
 }
+
