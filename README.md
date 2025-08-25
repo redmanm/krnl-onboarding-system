@@ -526,7 +526,7 @@ This project is developed for demonstration of advanced multi-agent system archi
 
 **Technologies Used:**
 - **Backend**: FastAPI, SQLAlchemy, PostgreSQL, Redis, Pydantic
-- **Frontend**: HTML5, CSS3, JavaScript (ES6+), Font Awesome
+- **Frontend**: NextJS, TailwindCSS, Font Awesome
 - **Infrastructure**: Docker, Docker Compose, Nginx
 - **Testing**: pytest, asyncio
 - **Architecture**: MCP, A2A, Microservices, Event-driven design
